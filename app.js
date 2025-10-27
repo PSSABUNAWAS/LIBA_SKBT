@@ -1,0 +1,1 @@
+document.getElementById('btnGenQuiz')?.addEventListener('click',()=>{document.getElementById('quizWrap').innerHTML='Kuiz dijana (demo).'});
