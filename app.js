@@ -1,4 +1,4 @@
-/* LIBA v2.0 — app.js (MCQ sahaja, butang auto, peratus & TP tepat) */
+/* LIBA v2.0 — MCQ tepat, tanpa drag/type, pengikatan butang auto */
 let mediaRecorder;
 let recordedChunks = [];
 let recordingUrl = null;
@@ -339,35 +339,28 @@ function checkQuiz(){
 function findButton(primaryId, altTexts){
   let el = primaryId ? document.getElementById(primaryId) : null;
   if(el) return el;
-
-  // Cari semua elemen yang berpotensi sebagai butang
-  const candidates = Array.from(document.querySelectorAll(
-    'button, a, [role="button"], input[type="button"], input[type="submit"]'
-  ));
-
-  // Padanan case-insensitive pada innerText/value
-  const lowers = altTexts.map(t => t.toLowerCase());
+  const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]'));
+  const lowerAlts = altTexts.map(t=>t.toLowerCase());
   for(const c of candidates){
     const txt = (c.innerText || c.value || c.textContent || '').trim().toLowerCase();
     if(!txt) continue;
-    if(lowers.some(t => txt.includes(t))) return c;
+    if(lowerAlts.some(t => txt.includes(t))) return c;
   }
   return null;
 }
 
-/* Bind semua butang berdasarkan ID atau teks seperti diminta */
 function bindUI(){
   try{
-    // Padanan tepat seperti diminta:
-    const btnStart     = findButton('btnStart',     ['Mula Baca','Mula']);
-    const btnStop      = findButton('btnStop',      ['Tamat','Selesai']);
-    const btnAnalyze   = findButton('btnAnalyze',   ['Analisis']);
-    const btnQuiz      = findButton('btnQuiz',      ['Jana Kuiz']);
-    const btnExport    = findButton('btnExport',    ['Export','CSV']);
-    const btnCheckQuiz = findButton('btnCheckQuiz', ['Semak Kuiz']);
+    // Cari butang mengikut ID ATAU teks
+    const btnStart = findButton('btnStart', ['mula baca','mula','start']);
+    const btnStop = findButton('btnStop', ['tamat','henti','stop','selesai']);
+    const btnAnalyze = findButton('btnAnalyze', ['analisis','analyze','kira']);
+    const btnQuiz = findButton('btnQuiz', ['jana kuiz','kuiz','quiz']);
+    const btnExport = findButton('btnExport', ['export','muat turun csv','csv']);
+    const btnCheckQuiz = findButton('btnCheckQuiz', ['semak kuiz','semak','periksa kuiz','check quiz']);
 
     if(!btnStart || !btnStop){
-      showToast("Butang 'Mula/Mula Baca' atau 'Tamat/Selesai' tidak ditemui. Letak teks yang sama atau gunakan ID btnStart/btnStop.");
+      showToast("Butang 'Mula' atau 'Tamat' tidak ditemui. Pastikan ada butang bertulis 'Mula/Mula Baca' dan 'Tamat/Selesai' atau gunakan ID btnStart/btnStop.");
     }
 
     if(btnStart){
@@ -405,29 +398,28 @@ function bindUI(){
 
     if(btnAnalyze){
       btnAnalyze.addEventListener('click', () => {
-        try{ renderResult(); saveCurrentRecord(); }
-        catch(err){ showToast("Ralat analisis: " + err); }
+        try{
+          renderResult();
+          saveCurrentRecord();
+        }catch(err){ showToast("Ralat analisis: " + err); }
       });
     }
 
     if(btnQuiz){
       btnQuiz.addEventListener('click', () => {
-        try{ buildQuiz(); }
-        catch(err){ showToast("Ralat jana kuiz: " + err); }
+        try{ buildQuiz(); }catch(err){ showToast("Ralat jana kuiz: " + err); }
       });
     }
 
     if(btnExport){
       btnExport.addEventListener('click', () => {
-        try{ exportCSV(); }
-        catch(err){ showToast("Ralat eksport CSV: " + err); }
+        try{ exportCSV(); }catch(err){ showToast("Ralat eksport CSV: " + err); }
       });
     }
 
     if(btnCheckQuiz){
       btnCheckQuiz.addEventListener('click', () => {
-        try{ checkQuiz(); }
-        catch(err){ showToast("Ralat semak kuiz: " + err); }
+        try{ checkQuiz(); }catch(err){ showToast("Ralat semak kuiz: " + err); }
       });
     }
   }catch(err){
@@ -440,6 +432,7 @@ function bindUI(){
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', bindUI, { once:true });
   }else{
+    // DOM sudah siap
     bindUI();
   }
 })();
