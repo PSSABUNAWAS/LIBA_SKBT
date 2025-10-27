@@ -1,0 +1,17 @@
+body{font-family:Arial,Helvetica,sans-serif;background:#f7f7fb;margin:0}header{display:flex;gap:12px;align-items:center;padding:12px 16px;background:#fff;border-bottom:1px solid #eee}.card{background:#fff;border:1px solid #eee;border-radius:12px;margin:12px;padding:12px}
+.brand-logos{display:flex;align-items:center;gap:10px}
+.brand-logos img{height:48px;max-width:120px;object-fit:contain}
+.liba-marquee{overflow:hidden;white-space:nowrap;background:#fff;border-bottom:1px solid #eee;text-align:center}
+.liba-marquee .track{display:inline-block;padding:8px 0;font-weight:800;animation:liba-marquee 12s linear infinite}
+@keyframes liba-marquee { from { transform: translateX(-100%);} to { transform: translateX(100%);} }
+
+.controls{display:flex;gap:10px}
+.primary{background:#111;color:#fff;border:1px solid #111;border-radius:10px;padding:8px 12px;font-weight:700}
+.quiz-card{border:1px solid #eee;border-radius:12px;padding:12px;margin-top:8px;background:#fff}
+.quiz-options{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.quiz-option{border:1px solid #ddd;border-radius:10px;padding:8px;background:#fafafa;cursor:pointer}
+.quiz-option.correct{border-color:#43a047}
+.quiz-option.wrong{border-color:#e53935}
+.dd-bank,.dd-targets{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.dd-chip{padding:6px 10px;border:1px dashed #999;border-radius:999px;background:#fff;cursor:grab}
+.dd-slot{min-width:80px;min-height:32px;padding:6px 10px;border:2px dashed #bbb;border-radius:8px;background:#fcfcfc}
