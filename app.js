@@ -1,4 +1,4 @@
-/* LIBA v2.0 (dikemas kini) */
+/* LIBA v2.0 (dikemas kini — MCQ sahaja, peratus & TP sentiasa dikira) */
 let mediaRecorder;
 let recordedChunks = [];
 let recordingUrl = null;
@@ -19,8 +19,9 @@ function computeWPM(text, seconds){
   const wc = wordCount(text);
   return Math.round((wc / seconds) * 60);
 }
+/* Pemetaan linear WPM→% (cap 100). Contoh: 30 WPM → 30% */
 function percentFromWPM(wpm){
-  const pct = Math.round(Math.min(100, (wpm / 100) * 100));
+  const pct = Math.round(Math.min(100, Math.max(0, (wpm / 100) * 100)));
   return pct;
 }
 function formatTime(s){
@@ -107,26 +108,31 @@ function tpFromPercent(p){
   return {tp:1, label:'TP1 – Permulaan', color:'var(--tp1)'};
 }
 
+/* PEMULIHAN hanya apabila pilihan tepat "PEMULIHAN" (bukan 1–6 AR-RAZI/AL-KHAWARIZMI) */
 function isPemulihan(selected){
-  return /^(1|2|3|4|5|6)\s+(AR-RAZI|AL-KHAWARIZMI)$/i.test(selected);
+  return (selected || '').trim().toUpperCase() === 'PEMULIHAN';
 }
 
 function renderResult(){
   const cls = $('#classSelect').value;
   const wpm = computeWPM(transcriptText, secondsElapsed);
+
+  // Kira % & TP untuk SEMUA kelas (termasuk PEMULIHAN)
+  const p = percentFromWPM(wpm);
+  const map = tpFromPercent(p);
+
   if(isPemulihan(cls)){
     const status = wpm >= 40 ? 'Menguasai' : 'Tidak Menguasai';
-    const color = wpm >= 40 ? 'var(--tp4)' : 'var(--tp1)';
+    const statusColor = wpm >= 40 ? 'var(--tp4)' : 'var(--tp1)';
     $('#resultArea').innerHTML = `
-      <div class="tp-chip" style="border-color:${color}">
-        <span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block"></span>
-        <strong>Keputusan (Pemulihan): ${status}</strong>
+      <div class="tp-chip" style="border-color:${map.color}">
+        <span style="width:10px;height:10px;border-radius:50%;background:${statusColor};display:inline-block"></span>
+        <strong>PEMULIHAN: ${status}</strong>
         <span>•</span><span>WPM: ${wpm}</span>
+        <span>•</span><span>${p}% (${map.tp} – ${map.label})</span>
       </div>
     `;
   }else{
-    const p = percentFromWPM(wpm);
-    const map = tpFromPercent(p);
     $('#resultArea').innerHTML = `
       <div class="tp-chip" style="border-color:${map.color}">
         <span style="width:10px;height:10px;border-radius:50%;background:${map.color};display:inline-block"></span>
@@ -149,28 +155,26 @@ function appendRowToTable(r){
                   <td>${r.kelas}</td>
                   <td>${r.tempoh_s}</td>
                   <td>${r.wpm}</td>
-                  <td>${r.peratus!==''? r.peratus : '-'}</td>
-                  <td>${r.tp!==''? r.tp : '-'}</td>
+                  <td>${r.peratus}</td>
+                  <td>${r.tp}</td>
                   <td>${r.pautan_rakaman ? `<a href="${r.pautan_rakaman}" target="_blank">Rakaman</a>` : '-'}</td>`;
   tb.prepend(tr);
 }
 function saveCurrentRecord(){
   const now = new Date();
   const wpm = computeWPM(transcriptText, secondsElapsed);
-  const cls = $('#classSelect').value;
-  const isPem = isPemulihan(cls);
-  const percent = isPem ? '' : percentFromWPM(wpm);
-  const tp = isPem ? '' : tpFromPercent(percent).tp;
+  const percent = percentFromWPM(wpm);
+  const tp = tpFromPercent(percent).tp;
 
   const row = {
     tarikh: now.toLocaleDateString(),
     masa: now.toLocaleTimeString(),
     nama: $('#studentName').value || '',
-    kelas: cls,
+    kelas: $('#classSelect').value || '',
     tempoh_s: secondsElapsed,
     wpm: wpm,
-    peratus: percent,
-    tp: tp,
+    peratus: percent,     // sentiasa isi (PEMULIHAN & bukan PEMULIHAN)
+    tp: tp,               // sentiasa isi
     pautan_rakaman: recordingUrl || ''
   };
   rows.push(row);
@@ -187,8 +191,8 @@ function exportCSV(){
       "Kelas": r.kelas,
       "Tempoh (s)": r.tempoh_s,
       "WPM": r.wpm,
-      "Peratus": r.peratus === '' ? '-' : r.peratus,
-      "TP": r.tp === '' ? '-' : r.tp,
+      "Peratus": r.peratus,
+      "TP": r.tp,
       "Rakaman": r.pautan_rakaman || '-'
     };
     lines.push(headers.map(h => `"${(ordered[h]??"").toString().replace(/"/g,'""')}"`).join(","));
@@ -202,7 +206,7 @@ function exportCSV(){
   URL.revokeObjectURL(url);
 }
 
-// Kuiz (ringkas – MCQ & isi tempat kosong berdasarkan transkrip)
+// ===== Kuiz: MCQ sahaja (drag & drop dibuang) =====
 function randomChoice(arr){ return arr[Math.floor(Math.random()*arr.length)] }
 function splitSentences(text){
   return text.replace(/\n+/g,' ').split(/(?<=[\.\!\?])\s+/).filter(s => s.trim().length>0);
@@ -227,18 +231,6 @@ function generateMCQ(sentence){
   const options = [...distractors, answer].sort(()=>Math.random()-0.5);
   return {type:'mcq', stem, options, answer};
 }
-function generateDragDrop(sentence){
-  const tokens = sentence.split(/\s+/);
-  const idx = [];
-  for(let i=0;i<tokens.length;i++){ if(tokens[i].length>3) idx.push(i); }
-  if(idx.length<3) return null;
-  idx.sort(()=>Math.random()-0.5);
-  const blanksIdx = idx.slice(0,3).sort((a,b)=>a-b);
-  const answers = blanksIdx.map(i => tokens[i]);
-  for(const i of blanksIdx){ tokens[i] = '____'; }
-  const stem = tokens.join(' ');
-  return {type:'drag', stem, answers};
-}
 function buildQuiz(){
   const container = $('#quizContainer');
   container.innerHTML = "";
@@ -250,7 +242,7 @@ function buildQuiz(){
   const sents = splitSentences(src);
   let made = 0;
   for(const s of sents){
-    if(made >= 4) break;
+    if(made >= 4) break; // maksimum 4 soalan MCQ
     const mcq = generateMCQ(s);
     if(mcq){
       made++;
@@ -261,19 +253,6 @@ function buildQuiz(){
           <input type="radio" name="mcq_${made}" value="${opt}"> ${"ABCD"[i]}. ${opt}
         </label>`).join('');
       card.dataset.answer = mcq.answer;
-      container.appendChild(card);
-    }
-    if(made >= 4) break;
-    const dd = generateDragDrop(s);
-    if(dd){
-      made++;
-      const options = dd.answers.slice().sort(()=>Math.random()-0.5);
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `<p><strong>Isi Tempat Kosong (Drag/Type):</strong> ${dd.stem}</p>
-        <div><small>Petunjuk jawapan:</small> ${options.map(o=>`<span class="tp-chip" style="margin-right:6px">${o}</span>`).join('')}</div>
-        <div><small>Isi jawapan di ruang bergaris.</small></div>`;
-      card.dataset.answers = JSON.stringify(dd.answers);
       container.appendChild(card);
     }
   }
@@ -291,16 +270,6 @@ function checkQuiz(){
       if(sel && sel.value.trim().toLowerCase() === card.dataset.answer.trim().toLowerCase()){
         correct++;
       }
-    }else if(card.dataset.answers){
-      total++;
-      const ans = JSON.parse(card.dataset.answers);
-      // accept typed answers
-      const blanks = card.querySelectorAll('.blank');
-      let ok = true;
-      blanks.forEach((b,i)=>{
-        if((b.textContent||'').trim().toLowerCase() !== ans[i].trim().toLowerCase()) ok = false;
-      });
-      if(ok) correct++;
     }
   });
   $('#quizScore').textContent = `Skor Kuiz: ${correct} / ${total}`;
