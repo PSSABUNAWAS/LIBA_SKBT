@@ -1,4 +1,4 @@
-/* LIBA v2.0 — MCQ tepat, tanpa drag/type, pengikatan butang auto */
+/* LIBA v2.0 — MCQ tepat dari transkrip (tanpa drag/type) */
 let mediaRecorder;
 let recordedChunks = [];
 let recordingUrl = null;
@@ -11,15 +11,6 @@ let secondsElapsed = 0;
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
-/* =============== Util paparan ringkas ralat =============== */
-function showToast(msg){
-  try{
-    const el = $('#srStatus') || $('#recStatus') || $('#resultArea');
-    if(el) el.textContent = msg;
-    console.error(msg);
-  }catch(_){}
-}
-
 /* =========================
    Util Asas (WPM/TP/Timer)
    ========================= */
@@ -31,9 +22,10 @@ function computeWPM(text, seconds){
   const wc = wordCount(text);
   return Math.round((wc / seconds) * 60);
 }
-/* Linear WPM→% (cap 100). Contoh: 30 WPM → 30% */
+/* Pemetaan linear WPM→% (cap 100). Contoh: 30 WPM → 30% */
 function percentFromWPM(wpm){
-  return Math.round(Math.min(100, Math.max(0, (wpm / 100) * 100)));
+  const pct = Math.round(Math.min(100, Math.max(0, (wpm / 100) * 100)));
+  return pct;
 }
 function formatTime(s){
   const m = Math.floor(s/60).toString().padStart(2,'0');
@@ -42,10 +34,10 @@ function formatTime(s){
 }
 function startTimer(){
   secondsElapsed = 0;
-  const t = $('#timer'); if(t) t.textContent = formatTime(secondsElapsed);
+  $('#timer').textContent = formatTime(secondsElapsed);
   timerInterval = setInterval(() => {
     secondsElapsed++;
-    const tt = $('#timer'); if(tt) tt.textContent = formatTime(secondsElapsed);
+    $('#timer').textContent = formatTime(secondsElapsed);
   }, 1000);
 }
 function stopTimer(){
@@ -58,16 +50,16 @@ function stopTimer(){
 function initSpeechRecognition(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
-    showToast("Peranti tidak menyokong SpeechRecognition.");
+    $('#srStatus').textContent = "Peranti tidak menyokong SpeechRecognition.";
     return null;
   }
   const rec = new SR();
   rec.lang = 'ms-MY';
   rec.interimResults = true;
   rec.continuous = true;
-  rec.onstart = () => { const s=$('#srStatus'); if(s) s.textContent="Sedang transkripsi…"; recognizing = true; };
-  rec.onerror = (e) => { showToast("Ralat SR: " + e.error); };
-  rec.onend = () => { const s=$('#srStatus'); if(s) s.textContent="Selesai transkripsi"; recognizing = false; };
+  rec.onstart = () => { $('#srStatus').textContent = "Sedang transkripsi…"; recognizing = true; };
+  rec.onerror = (e) => { $('#srStatus').textContent = "Ralat SR: " + e.error; };
+  rec.onend = () => { $('#srStatus').textContent = "Selesai transkripsi"; recognizing = false; };
   rec.onresult = (e) => {
     let finalText = "";
     for(let i=e.resultIndex; i<e.results.length; i++){
@@ -75,7 +67,7 @@ function initSpeechRecognition(){
       finalText += res[0].transcript + " ";
     }
     transcriptText += finalText;
-    const tb = $('#transcriptBox'); if(tb) tb.textContent = transcriptText.trim();
+    $('#transcriptBox').textContent = transcriptText.trim();
   };
   return rec;
 }
@@ -93,19 +85,19 @@ async function startRecording(){
       a.href = recordingUrl;
       a.download = `rakaman_${Date.now()}.webm`;
       a.textContent = 'Muat turun rakaman';
-      const rl = $('#recordingLinks');
-      if(rl){ rl.appendChild(a); rl.appendChild(document.createElement('br')); }
+      $('#recordingLinks').appendChild(a);
+      $('#recordingLinks').appendChild(document.createElement('br'));
     };
     mediaRecorder.start();
-    const r = $('#recStatus'); if(r) r.textContent = "Merakam…";
+    $('#recStatus').textContent = "Merakam…";
   }catch(err){
-    showToast("Ralat mikrofon: " + (err && err.message ? err.message : err));
+    $('#recStatus').textContent = "Ralat mikrofon: " + err.message;
   }
 }
 function stopRecording(){
   if(mediaRecorder && mediaRecorder.state !== 'inactive'){
     mediaRecorder.stop();
-    const r = $('#recStatus'); if(r) r.textContent = "Rakaman disimpan. (Boleh muat turun)";
+    $('#recStatus').textContent = "Rakaman disimpan. (Boleh muat turun)";
   }
 }
 
@@ -124,7 +116,7 @@ function isPemulihan(selected){
   return (selected || '').trim().toUpperCase() === 'PEMULIHAN';
 }
 function renderResult(){
-  const cls = $('#classSelect') ? $('#classSelect').value : '';
+  const cls = $('#classSelect').value;
   const wpm = computeWPM(transcriptText, secondsElapsed);
   const p = percentFromWPM(wpm);
   const map = tpFromPercent(p);
@@ -179,8 +171,8 @@ function saveCurrentRecord(){
   const row = {
     tarikh: now.toLocaleDateString(),
     masa: now.toLocaleTimeString(),
-    nama: $('#studentName') ? ($('#studentName').value || '') : '',
-    kelas: $('#classSelect') ? ($('#classSelect').value || '') : '',
+    nama: $('#studentName').value || '',
+    kelas: $('#classSelect').value || '',
     tempoh_s: secondsElapsed,
     wpm: wpm,
     peratus: percent,
@@ -219,16 +211,19 @@ function exportCSV(){
 /* =========================
    Kuiz MCQ sahaja — Dijana Tepat dari Transkrip
    ========================= */
+
+/* Senarai kata umum BM untuk ditapis daripada calon jawapan */
 const MALAY_STOPWORDS = new Set([
-  'yang','dan','atau','serta','itu','ini','di','ke','dari','daripada','kepada','untuk','pada','dengan',
+  'yang','dan','atau','serta','atau','atau','itu','ini','itu','ini','di','ke','dari','daripada','kepada','untuk','pada','dengan',
   'bagi','akan','telah','pernah','sedang','belum','sudah','masih','ialah','adalah','merupakan','bukan','tiada','tidak',
   'satu','dua','tiga','empat','lima','enam','tujuh','lapan','sembilan','sepuluh',
   'saya','aku','anda','awak','kamu','dia','mereka','kami','kita',
-  'sebuah','seorang','beberapa','para','tersebut','sebab','kerana','agar','supaya','jika','kalau','semasa',
+  'sebuah','seorang','beberapa','para','yang','tersebut','sebab','kerana','agar','supaya','jika','kalau','semasa',
   'pun','lah','kah','tah','kan','sahaja','hanya','juga','lebih','amat','sangat','paling','antara','hingga','sehingga',
   'dalam','luar','atas','bawah','tepi','terhadap','oleh','oleh itu','maka'
 ]);
 
+/* Util teks */
 function normalizeSpaces(t){ return t.replace(/\s+/g,' ').trim(); }
 function stripPunct(t){ return t.replace(/[()"'`~^:;,_\-–—/\\|<>[\]{}]/g, ''); }
 function toWords(text){
@@ -237,44 +232,77 @@ function toWords(text){
 }
 function isCandidateWord(w){
   if(!w) return false;
-  if(w.length < 4) return false;
-  if(MALAY_STOPWORDS.has(w)) return false;
-  if(/^\d+$/.test(w)) return false;
+  if(w.length < 4) return false;             // elak kata terlalu pendek
+  if(MALAY_STOPWORDS.has(w)) return false;   // tapis kata umum
+  if(/^\d+$/.test(w)) return false;          // elak nombor tulen
   return true;
 }
-function unique(arr){ const s=new Set(); return arr.filter(x=>!s.has(x) && s.add(x)); }
-function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function unique(arr){
+  const seen = new Set(); const out = [];
+  for(const x of arr){ if(!seen.has(x)){ seen.add(x); out.push(x); } }
+  return out;
+}
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
 
+/* Pisah ayat lebih kukuh: titik, tanda soal/seru, nokhtah berturutan */
 function splitSentences(text){
   const cleaned = normalizeSpaces(text);
-  const parts = cleaned.split(/(?<=[\.\!\?])\s+(?=[A-ZÀ-ÖØ-ÝĀ-Ŋ])/u);
+  const parts = cleaned.split(/(?<=[\.\!\?])\s+(?=[A-ZĀĂĄĆČĎĐĒĖĘĚĞĠĢĪİĶĻŁŃŅŇŌŒŚŞŠŤŪŮŰŲŴŶŸŽA-ZÀ-ÖØ-ÝĀ-Ŋ])/u);
+  // fallback jika tiada huruf besar selepas tanda baca (transkrip SR)
   let sents = [];
   for(const p of parts){
     const chunks = p.split(/[\.\!\?]+/).map(x=>normalizeSpaces(x)).filter(Boolean);
     sents.push(...chunks);
   }
   sents = sents.map(s => s.length && !/[.!?]$/.test(s) ? s + '.' : s);
+  // tapis ayat terlalu pendek
   return sents.filter(s => toWords(s).length >= 5);
 }
+
+/* Kolam calon global untuk Distraktor: dari keseluruhan transkrip */
 function buildGlobalPool(allText){
-  return unique(toWords(allText).filter(isCandidateWord));
+  const words = toWords(allText).filter(isCandidateWord);
+  return unique(words);
 }
+
+/* Jana 1 MCQ daripada 1 ayat */
 function generateMCQFromSentence(sentence, globalPool){
   const sentWords = toWords(sentence);
   const candidates = unique(sentWords.filter(isCandidateWord));
   if(candidates.length === 0) return null;
 
+  // pilih jawapan yang benar dari ayat
   const answer = candidates[Math.floor(Math.random()*candidates.length)];
+
+  // bina stem: gantikan perkataan asal (case-insensitive, sempadan perkataan)
   const stem = sentence.replace(new RegExp(`\\b${answer}\\b`, 'i'), '____');
 
-  const pool = globalPool.filter(w => w.toLowerCase() !== answer.toLowerCase());
+  // bina distraktor dari kolam global selain jawapan
+  const pool = globalPool.filter(w => w !== answer);
+  // utamakan panjang hampir sama supaya munasabah
   const nearLen = pool.filter(w => Math.abs(w.length - answer.length) <= 2);
   const pickBase = nearLen.length >= 10 ? nearLen : pool;
 
   const distractors = [];
   for(const w of shuffle(pickBase)){
     if(distractors.length >= 3) break;
-    if(!distractors.includes(w)) distractors.push(w);
+    if(w.toLowerCase() === answer.toLowerCase()) continue;
+    if(distractors.includes(w)) continue;
+    // elak kosmetik yang terlalu mirip (ejaan sama)
+    distractors.push(w);
+  }
+  // jika masih belum cukup, tambah apa yang ada
+  while(distractors.length < 3 && pool.length){
+    const w = pool[Math.floor(Math.random()*pool.length)];
+    if(w && !distractors.includes(w) && w.toLowerCase() !== answer.toLowerCase()){
+      distractors.push(w);
+    }
   }
   if(distractors.length < 3) return null;
 
@@ -282,25 +310,30 @@ function generateMCQFromSentence(sentence, globalPool){
   return { stem, options, answer };
 }
 
+/* Bina set MCQ */
 function buildQuiz(){
   const container = $('#quizContainer');
   container.innerHTML = "";
-  const src = normalizeSpaces((transcriptText || '').trim());
+  const src = normalizeSpaces(transcriptText.trim());
   if(!src){
     container.innerHTML = "<em>Transkrip diperlukan untuk jana kuiz. Tekan Mula/Selesai Bacaan.</em>";
     return;
   }
+
   const sents = splitSentences(src);
   const globalPool = buildGlobalPool(src);
-  if(globalPool.length < 8 || sents.length === 0){
+  if(globalPool.length < 8){
     container.innerHTML = "<em>Teks terlalu pendek/umum untuk jana pilihan jawapan yang baik. Sila tambah bacaan.</em>";
     return;
   }
-  let made = 0, MAX_Q = 4;
+
+  let made = 0;
+  const MAX_Q = 4;
   for(const s of sents){
     if(made >= MAX_Q) break;
     const mcq = generateMCQFromSentence(s, globalPool);
     if(!mcq) continue;
+
     made++;
     const card = document.createElement('div');
     card.className = 'card';
@@ -311,10 +344,13 @@ function buildQuiz(){
     card.dataset.answer = mcq.answer;
     container.appendChild(card);
   }
+
   if(container.children.length === 0){
     container.innerHTML = "<em>Teks tidak sesuai untuk menjana MCQ. Cuba ayat yang lebih panjang/bermakna.</em>";
   }
 }
+
+/* Semak MCQ */
 function checkQuiz(){
   const container = $('#quizContainer');
   let total = 0, correct = 0;
@@ -327,112 +363,44 @@ function checkQuiz(){
       }
     }
   });
-  const qs = $('#quizScore');
-  if(qs) qs.textContent = `Skor Kuiz: ${correct} / ${total}`;
+  $('#quizScore').textContent = `Skor Kuiz: ${correct} / ${total}`;
 }
 
 /* =========================
-   Pengikatan Butang — tahan lasak
+   Events
    ========================= */
+window.addEventListener('DOMContentLoaded', () => {
+  $('#btnStart').addEventListener('click', async () => {
+    transcriptText = "";
+    $('#transcriptBox').textContent = "";
+    $('#resultArea').textContent = "";
+    $('#quizContainer').innerHTML = "";
+    $('#quizScore').textContent = "";
+    $('#btnStop').disabled = false;
+    $('#btnStart').disabled = true;
 
-/* Cari butang mengikut ID atau teks dalam butang (BM/BI) */
-function findButton(primaryId, altTexts){
-  let el = primaryId ? document.getElementById(primaryId) : null;
-  if(el) return el;
-  const candidates = Array.from(document.querySelectorAll('button, a, [role="button"], input[type="button"], input[type="submit"]'));
-  const lowerAlts = altTexts.map(t=>t.toLowerCase());
-  for(const c of candidates){
-    const txt = (c.innerText || c.value || c.textContent || '').trim().toLowerCase();
-    if(!txt) continue;
-    if(lowerAlts.some(t => txt.includes(t))) return c;
-  }
-  return null;
-}
+    startTimer();
+    recognition = initSpeechRecognition();
+    if(recognition) recognition.start();
+    await startRecording();
+  });
 
-function bindUI(){
-  try{
-    // Cari butang mengikut ID ATAU teks
-    const btnStart = findButton('btnStart', ['mula baca','mula','start']);
-    const btnStop = findButton('btnStop', ['tamat','henti','stop','selesai']);
-    const btnAnalyze = findButton('btnAnalyze', ['analisis','analyze','kira']);
-    const btnQuiz = findButton('btnQuiz', ['jana kuiz','kuiz','quiz']);
-    const btnExport = findButton('btnExport', ['export','muat turun csv','csv']);
-    const btnCheckQuiz = findButton('btnCheckQuiz', ['semak kuiz','semak','periksa kuiz','check quiz']);
+  $('#btnStop').addEventListener('click', () => {
+    stopTimer();
+    if(recognition && recognizing){ recognition.stop(); }
+    stopRecording();
+    $('#btnStop').disabled = true;
+    $('#btnStart').disabled = false;
+    renderResult();
+    saveCurrentRecord();
+  });
 
-    if(!btnStart || !btnStop){
-      showToast("Butang 'Mula' atau 'Tamat' tidak ditemui. Pastikan ada butang bertulis 'Mula/Mula Baca' dan 'Tamat/Selesai' atau gunakan ID btnStart/btnStop.");
-    }
+  $('#btnAnalyze').addEventListener('click', () => {
+    renderResult();
+    saveCurrentRecord();
+  });
 
-    if(btnStart){
-      btnStart.addEventListener('click', async () => {
-        try{
-          transcriptText = "";
-          const tb = $('#transcriptBox'); if(tb) tb.textContent = "";
-          const ra = $('#resultArea'); if(ra) ra.textContent = "";
-          const qc = $('#quizContainer'); if(qc) qc.innerHTML = "";
-          const qs = $('#quizScore'); if(qs) qs.textContent = "";
-          if(btnStop) btnStop.disabled = false;
-          btnStart.disabled = true;
-
-          startTimer();
-          recognition = initSpeechRecognition();
-          if(recognition) recognition.start();
-          await startRecording();
-        }catch(err){ showToast("Ralat mula: " + err); }
-      });
-    }
-
-    if(btnStop){
-      btnStop.addEventListener('click', () => {
-        try{
-          stopTimer();
-          if(recognition && recognizing){ recognition.stop(); }
-          stopRecording();
-          btnStop.disabled = true;
-          if(btnStart) btnStart.disabled = false;
-          renderResult();
-          saveCurrentRecord();
-        }catch(err){ showToast("Ralat tamat: " + err); }
-      });
-    }
-
-    if(btnAnalyze){
-      btnAnalyze.addEventListener('click', () => {
-        try{
-          renderResult();
-          saveCurrentRecord();
-        }catch(err){ showToast("Ralat analisis: " + err); }
-      });
-    }
-
-    if(btnQuiz){
-      btnQuiz.addEventListener('click', () => {
-        try{ buildQuiz(); }catch(err){ showToast("Ralat jana kuiz: " + err); }
-      });
-    }
-
-    if(btnExport){
-      btnExport.addEventListener('click', () => {
-        try{ exportCSV(); }catch(err){ showToast("Ralat eksport CSV: " + err); }
-      });
-    }
-
-    if(btnCheckQuiz){
-      btnCheckQuiz.addEventListener('click', () => {
-        try{ checkQuiz(); }catch(err){ showToast("Ralat semak kuiz: " + err); }
-      });
-    }
-  }catch(err){
-    showToast("Ralat pengikatan UI: " + err);
-  }
-}
-
-/* Pastikan bindUI dipanggil sama ada DOM sudah siap atau belum */
-(function ensureInit(){
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', bindUI, { once:true });
-  }else{
-    // DOM sudah siap
-    bindUI();
-  }
-})();
+  $('#btnQuiz').addEventListener('click', () => buildQuiz());
+  $('#btnExport').addEventListener('click', () => exportCSV());
+  $('#btnCheckQuiz').addEventListener('click', () => checkQuiz());
+});
