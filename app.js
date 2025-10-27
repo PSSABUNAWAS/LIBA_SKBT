@@ -1,4 +1,4 @@
-/* LIBA v2.0 (dikemas kini — MCQ sahaja, peratus & TP sentiasa dikira) */
+/* LIBA v2.0 — MCQ tepat dari transkrip (tanpa drag/type) */
 let mediaRecorder;
 let recordedChunks = [];
 let recordingUrl = null;
@@ -11,6 +11,9 @@ let secondsElapsed = 0;
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+/* =========================
+   Util Asas (WPM/TP/Timer)
+   ========================= */
 function wordCount(s){
   return (s.trim().match(/\b[\p{L}\p{N}’']+\b/gu) || []).length;
 }
@@ -29,7 +32,6 @@ function formatTime(s){
   const ss = (s%60).toString().padStart(2,'0');
   return `${m}:${ss}`;
 }
-
 function startTimer(){
   secondsElapsed = 0;
   $('#timer').textContent = formatTime(secondsElapsed);
@@ -42,7 +44,9 @@ function stopTimer(){
   if(timerInterval){ clearInterval(timerInterval); timerInterval = null; }
 }
 
-// SpeechRecognition
+/* =========================
+   SpeechRecognition & Rakaman
+   ========================= */
 function initSpeechRecognition(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SR){
@@ -68,7 +72,6 @@ function initSpeechRecognition(){
   return rec;
 }
 
-// Rakaman
 async function startRecording(){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -98,7 +101,9 @@ function stopRecording(){
   }
 }
 
-// TP mapping
+/* =========================
+   TP & Paparan Keputusan
+   ========================= */
 function tpFromPercent(p){
   if(p >= 90) return {tp:6, label:'TP6 – Cemerlang', color:'var(--tp6)'};
   if(p >= 80) return {tp:5, label:'TP5 – Sangat Baik', color:'var(--tp5)'};
@@ -107,17 +112,12 @@ function tpFromPercent(p){
   if(p >= 40) return {tp:2, label:'TP2 – Asas', color:'var(--tp2)'};
   return {tp:1, label:'TP1 – Permulaan', color:'var(--tp1)'};
 }
-
-/* PEMULIHAN hanya apabila pilihan tepat "PEMULIHAN" (bukan 1–6 AR-RAZI/AL-KHAWARIZMI) */
 function isPemulihan(selected){
   return (selected || '').trim().toUpperCase() === 'PEMULIHAN';
 }
-
 function renderResult(){
   const cls = $('#classSelect').value;
   const wpm = computeWPM(transcriptText, secondsElapsed);
-
-  // Kira % & TP untuk SEMUA kelas (termasuk PEMULIHAN)
   const p = percentFromWPM(wpm);
   const map = tpFromPercent(p);
 
@@ -143,7 +143,9 @@ function renderResult(){
   }
 }
 
-// Rekod + CSV
+/* =========================
+   Rekod & Eksport CSV
+   ========================= */
 const rows = [];
 function appendRowToTable(r){
   const tb = document.querySelector('#recordTable tbody');
@@ -173,8 +175,8 @@ function saveCurrentRecord(){
     kelas: $('#classSelect').value || '',
     tempoh_s: secondsElapsed,
     wpm: wpm,
-    peratus: percent,     // sentiasa isi (PEMULIHAN & bukan PEMULIHAN)
-    tp: tp,               // sentiasa isi
+    peratus: percent,
+    tp: tp,
     pautan_rakaman: recordingUrl || ''
   };
   rows.push(row);
@@ -206,60 +208,149 @@ function exportCSV(){
   URL.revokeObjectURL(url);
 }
 
-// ===== Kuiz: MCQ sahaja (drag & drop dibuang) =====
-function randomChoice(arr){ return arr[Math.floor(Math.random()*arr.length)] }
-function splitSentences(text){
-  return text.replace(/\n+/g,' ').split(/(?<=[\.\!\?])\s+/).filter(s => s.trim().length>0);
+/* =========================
+   Kuiz MCQ sahaja — Dijana Tepat dari Transkrip
+   ========================= */
+
+/* Senarai kata umum BM untuk ditapis daripada calon jawapan */
+const MALAY_STOPWORDS = new Set([
+  'yang','dan','atau','serta','atau','atau','itu','ini','itu','ini','di','ke','dari','daripada','kepada','untuk','pada','dengan',
+  'bagi','akan','telah','pernah','sedang','belum','sudah','masih','ialah','adalah','merupakan','bukan','tiada','tidak',
+  'satu','dua','tiga','empat','lima','enam','tujuh','lapan','sembilan','sepuluh',
+  'saya','aku','anda','awak','kamu','dia','mereka','kami','kita',
+  'sebuah','seorang','beberapa','para','yang','tersebut','sebab','kerana','agar','supaya','jika','kalau','semasa',
+  'pun','lah','kah','tah','kan','sahaja','hanya','juga','lebih','amat','sangat','paling','antara','hingga','sehingga',
+  'dalam','luar','atas','bawah','tepi','terhadap','oleh','oleh itu','maka'
+]);
+
+/* Util teks */
+function normalizeSpaces(t){ return t.replace(/\s+/g,' ').trim(); }
+function stripPunct(t){ return t.replace(/[()"'`~^:;,_\-–—/\\|<>[\]{}]/g, ''); }
+function toWords(text){
+  const cleaned = stripPunct(text).toLowerCase();
+  return (cleaned.match(/\b[\p{L}\p{N}’']+\b/gu) || []);
 }
-function generateMCQ(sentence){
-  const tokens = sentence.split(/\s+/).filter(w => w.length>3);
-  if(tokens.length < 1) return null;
-  const answer = randomChoice(tokens);
-  const stem = sentence.replace(new RegExp(`\\b${answer}\\b`,'i'), '____');
-  const distractors = new Set();
-  function mutate(w){
-    if(w.length<4) return w;
-    const i = Math.max(1, Math.min(w.length-2, Math.floor(w.length/2)));
-    return w.slice(0,i) + w[i].toUpperCase() + w.slice(i+1);
+function isCandidateWord(w){
+  if(!w) return false;
+  if(w.length < 4) return false;             // elak kata terlalu pendek
+  if(MALAY_STOPWORDS.has(w)) return false;   // tapis kata umum
+  if(/^\d+$/.test(w)) return false;          // elak nombor tulen
+  return true;
+}
+function unique(arr){
+  const seen = new Set(); const out = [];
+  for(const x of arr){ if(!seen.has(x)){ seen.add(x); out.push(x); } }
+  return out;
+}
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
   }
-  while(distractors.size<3){
-    const pick = randomChoice(tokens);
-    if(pick.toLowerCase() !== answer.toLowerCase()){
-      distractors.add(mutate(pick));
+  return a;
+}
+
+/* Pisah ayat lebih kukuh: titik, tanda soal/seru, nokhtah berturutan */
+function splitSentences(text){
+  const cleaned = normalizeSpaces(text);
+  const parts = cleaned.split(/(?<=[\.\!\?])\s+(?=[A-ZĀĂĄĆČĎĐĒĖĘĚĞĠĢĪİĶĻŁŃŅŇŌŒŚŞŠŤŪŮŰŲŴŶŸŽA-ZÀ-ÖØ-ÝĀ-Ŋ])/u);
+  // fallback jika tiada huruf besar selepas tanda baca (transkrip SR)
+  let sents = [];
+  for(const p of parts){
+    const chunks = p.split(/[\.\!\?]+/).map(x=>normalizeSpaces(x)).filter(Boolean);
+    sents.push(...chunks);
+  }
+  sents = sents.map(s => s.length && !/[.!?]$/.test(s) ? s + '.' : s);
+  // tapis ayat terlalu pendek
+  return sents.filter(s => toWords(s).length >= 5);
+}
+
+/* Kolam calon global untuk Distraktor: dari keseluruhan transkrip */
+function buildGlobalPool(allText){
+  const words = toWords(allText).filter(isCandidateWord);
+  return unique(words);
+}
+
+/* Jana 1 MCQ daripada 1 ayat */
+function generateMCQFromSentence(sentence, globalPool){
+  const sentWords = toWords(sentence);
+  const candidates = unique(sentWords.filter(isCandidateWord));
+  if(candidates.length === 0) return null;
+
+  // pilih jawapan yang benar dari ayat
+  const answer = candidates[Math.floor(Math.random()*candidates.length)];
+
+  // bina stem: gantikan perkataan asal (case-insensitive, sempadan perkataan)
+  const stem = sentence.replace(new RegExp(`\\b${answer}\\b`, 'i'), '____');
+
+  // bina distraktor dari kolam global selain jawapan
+  const pool = globalPool.filter(w => w !== answer);
+  // utamakan panjang hampir sama supaya munasabah
+  const nearLen = pool.filter(w => Math.abs(w.length - answer.length) <= 2);
+  const pickBase = nearLen.length >= 10 ? nearLen : pool;
+
+  const distractors = [];
+  for(const w of shuffle(pickBase)){
+    if(distractors.length >= 3) break;
+    if(w.toLowerCase() === answer.toLowerCase()) continue;
+    if(distractors.includes(w)) continue;
+    // elak kosmetik yang terlalu mirip (ejaan sama)
+    distractors.push(w);
+  }
+  // jika masih belum cukup, tambah apa yang ada
+  while(distractors.length < 3 && pool.length){
+    const w = pool[Math.floor(Math.random()*pool.length)];
+    if(w && !distractors.includes(w) && w.toLowerCase() !== answer.toLowerCase()){
+      distractors.push(w);
     }
   }
-  const options = [...distractors, answer].sort(()=>Math.random()-0.5);
-  return {type:'mcq', stem, options, answer};
+  if(distractors.length < 3) return null;
+
+  const options = shuffle([...distractors, answer]);
+  return { stem, options, answer };
 }
+
+/* Bina set MCQ */
 function buildQuiz(){
   const container = $('#quizContainer');
   container.innerHTML = "";
-  const src = transcriptText.trim();
+  const src = normalizeSpaces(transcriptText.trim());
   if(!src){
     container.innerHTML = "<em>Transkrip diperlukan untuk jana kuiz. Tekan Mula/Selesai Bacaan.</em>";
     return;
   }
+
   const sents = splitSentences(src);
-  let made = 0;
-  for(const s of sents){
-    if(made >= 4) break; // maksimum 4 soalan MCQ
-    const mcq = generateMCQ(s);
-    if(mcq){
-      made++;
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `<p><strong>Soalan (MCQ):</strong> ${mcq.stem}</p>` +
-        mcq.options.map((opt,i)=>`<label style="display:block;margin:.25rem 0">
-          <input type="radio" name="mcq_${made}" value="${opt}"> ${"ABCD"[i]}. ${opt}
-        </label>`).join('');
-      card.dataset.answer = mcq.answer;
-      container.appendChild(card);
-    }
+  const globalPool = buildGlobalPool(src);
+  if(globalPool.length < 8){
+    container.innerHTML = "<em>Teks terlalu pendek/umum untuk jana pilihan jawapan yang baik. Sila tambah bacaan.</em>";
+    return;
   }
+
+  let made = 0;
+  const MAX_Q = 4;
+  for(const s of sents){
+    if(made >= MAX_Q) break;
+    const mcq = generateMCQFromSentence(s, globalPool);
+    if(!mcq) continue;
+
+    made++;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<p><strong>Soalan (MCQ):</strong> ${mcq.stem}</p>` +
+      mcq.options.map((opt,i)=>`<label style="display:block;margin:.25rem 0">
+        <input type="radio" name="mcq_${made}" value="${opt}"> ${"ABCD"[i]}. ${opt}
+      </label>`).join('');
+    card.dataset.answer = mcq.answer;
+    container.appendChild(card);
+  }
+
   if(container.children.length === 0){
-    container.innerHTML = "<em>Teks terlalu pendek untuk jana kuiz. Tambah bacaan lebih panjang.</em>";
+    container.innerHTML = "<em>Teks tidak sesuai untuk menjana MCQ. Cuba ayat yang lebih panjang/bermakna.</em>";
   }
 }
+
+/* Semak MCQ */
 function checkQuiz(){
   const container = $('#quizContainer');
   let total = 0, correct = 0;
@@ -275,7 +366,9 @@ function checkQuiz(){
   $('#quizScore').textContent = `Skor Kuiz: ${correct} / ${total}`;
 }
 
-// Events
+/* =========================
+   Events
+   ========================= */
 window.addEventListener('DOMContentLoaded', () => {
   $('#btnStart').addEventListener('click', async () => {
     transcriptText = "";
@@ -308,8 +401,6 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   $('#btnQuiz').addEventListener('click', () => buildQuiz());
-
   $('#btnExport').addEventListener('click', () => exportCSV());
-
   $('#btnCheckQuiz').addEventListener('click', () => checkQuiz());
 });
