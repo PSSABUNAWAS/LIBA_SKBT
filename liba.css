@@ -43,7 +43,7 @@ html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:
 .marquee span{
   display:inline-block;
   padding-left:0;
-  animation:slide 12s linear infinite;
+  animation:slide 18s linear infinite;
   font-weight:700;
   color:var(--blue);
 }
